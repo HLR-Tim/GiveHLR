@@ -18,11 +18,11 @@ app.use('/api/giveaways', giveawayRoutes);
 app.use('/api/tasks', taskRoutes);
 
 app.get('/', (req, res) => {
-  res.json({ message: 'PiGive API is running!' });
+  res.json({ message: 'GiveHLR API is running!' });
 });
 
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/pigive';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/givehlr';
 
 mongoose.connect(MONGO_URI)
   .then(() => {

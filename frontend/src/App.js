@@ -169,7 +169,7 @@ function App() {
   return (
     <div style={{ fontFamily: "Arial", background: "#1a1a2e", minHeight: "100vh", color: "white" }}>
       <nav style={{ background: "#16213e", padding: "15px 30px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-        <h1 style={{ margin: 0, color: "#f5a623" }}>PiGive</h1>
+        <h1 style={{ margin: 0, color: "#f5a623" }}>GiveHLR</h1>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <button onClick={() => setPage("home")} style={btnStyle(page === "home")}>Home</button>
           <button onClick={() => setPage("leaderboard")} style={btnStyle(page === "leaderboard")}>Leaderboard</button>
