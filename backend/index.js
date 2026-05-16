@@ -12,10 +12,12 @@ app.use(express.json());
 const authRoutes = require('./routes/auth');
 const giveawayRoutes = require('./routes/giveaway');
 const taskRoutes = require('./routes/tasks');
+const paymentRoutes = require('./routes/payments');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/giveaways', giveawayRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/payments', paymentRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'GiveHLR API is running!' });
