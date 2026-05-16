@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 const API = "https://pigive.onrender.com/api";
-
 function App() {
   const [giveaways, setGiveaways] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
