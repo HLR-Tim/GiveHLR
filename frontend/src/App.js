@@ -128,20 +128,36 @@ function App() {
   const createGiveaway = async () => {
     if (!user) return alert("Please login with Pi first!");
     if (!form.title || !form.amount || !form.amountPerUser || !form.expiresAt) return alert("Please fill all required fields!");
+    if (!window.Pi) return alert("Please open this app in Pi Browser!");
     try {
-      await axios.post(API + "/giveaways/create", {
-        creatorId: user._id,
-        title: form.title,
-        description: form.description,
+      await window.Pi.createPayment({
         amount: Number(form.amount),
-        amountPerUser: Number(form.amountPerUser),
-        location: { country: form.country },
-        expiresAt: form.expiresAt
+        memo: "GiveHLR: " + form.title,
+        metadata: { title: form.title }
+      }, {
+        onReadyForServerApproval: async (paymentId) => {
+          await axios.post(API + "/payments/approve", { paymentId });
+        },
+        onReadyForServerCompletion: async (paymentId, txid) => {
+          await axios.post(API + "/payments/complete", { paymentId, txid });
+          await axios.post(API + "/giveaways/create", {
+            creatorId: user._id,
+            title: form.title,
+            description: form.description,
+            amount: Number(form.amount),
+            amountPerUser: Number(form.amountPerUser),
+            location: { country: form.country },
+            expiresAt: form.expiresAt,
+            paymentId
+          });
+          addNotification("🎁 You created a new giveaway: " + form.title);
+          alert("Giveaway created successfully!");
+          setPage("home");
+          fetchGiveaways();
+        },
+        onCancel: () => alert("Payment cancelled."),
+        onError: (error) => alert("Payment error: " + error.message)
       });
-      addNotification("🎁 You created a new giveaway: " + form.title);
-      alert("Giveaway created successfully!");
-      setPage("home");
-      fetchGiveaways();
     } catch (error) {
       alert(error.response?.data?.message || "Failed to create giveaway");
     }
