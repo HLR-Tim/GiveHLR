@@ -5,7 +5,14 @@ require('dotenv').config();
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://givehlr.netlify.app',
+    'https://effortless-frangollo-d8c204.netlify.app',
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // Routes
