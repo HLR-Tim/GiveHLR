@@ -43,12 +43,12 @@ const styles = `
   }
   .nav-logo {
     font-family: 'Syne', sans-serif;
-    font-size: 22px; font-weight: 800;
+    font-size: 17px; font-weight: 800;
     background: linear-gradient(135deg, #f5a623, #ffcf70);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     letter-spacing: -0.5px;
   }
-  .nav-logo span { font-weight: 400; opacity: 0.7; }
+  .nav-logo span { font-weight: 800; opacity: 1; }
   .nav-right { display: flex; align-items: center; gap: 10px; }
   .nav-user {
     font-size: 13px; font-weight: 500; color: var(--gold);
