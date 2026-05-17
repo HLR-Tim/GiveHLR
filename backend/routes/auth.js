@@ -2,17 +2,33 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 
+// Generate referral code
+const generateReferralCode = (username) => {
+  return username.toUpperCase().slice(0, 4) + Math.random().toString(36).slice(2, 6).toUpperCase();
+};
+
 // Pi Login
 router.post('/pi-login', async (req, res) => {
   try {
-    const { piUid, username, accessToken } = req.body;
+    const { piUid, username, accessToken, referralCode } = req.body;
     let user = await User.findOne({ piUid });
     if (!user) {
-      user = new User({ piUid, username, accessToken });
+      const newReferralCode = generateReferralCode(username);
+      user = new User({ piUid, username, accessToken, referralCode: newReferralCode });
+      // Handle referral
+      if (referralCode) {
+        const referrer = await User.findOne({ referralCode });
+        if (referrer && referrer.piUid !== piUid) {
+          user.referredBy = referrer._id;
+          referrer.referralCount += 1;
+          await referrer.save();
+        }
+      }
       await user.save();
     } else {
       user.accessToken = accessToken;
       user.username = username;
+      if (!user.referralCode) user.referralCode = generateReferralCode(username);
       await user.save();
     }
     res.json({ user });
@@ -21,7 +37,20 @@ router.post('/pi-login', async (req, res) => {
   }
 });
 
-// Follow a user
+// Get user profile
+router.get('/profile/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+      .select('-accessToken')
+      .populate('referredBy', 'username');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Follow
 router.post('/follow', async (req, res) => {
   try {
     const { followerId, targetId } = req.body;
@@ -40,7 +69,7 @@ router.post('/follow', async (req, res) => {
   }
 });
 
-// Unfollow a user
+// Unfollow
 router.post('/unfollow', async (req, res) => {
   try {
     const { followerId, targetId } = req.body;
@@ -57,7 +86,7 @@ router.post('/unfollow', async (req, res) => {
   }
 });
 
-// Get all celebrities
+// Get celebrities
 router.get('/celebrities', async (req, res) => {
   try {
     const celebrities = await User.find({ isCelebrity: true }).select('username followers isCelebrity');
