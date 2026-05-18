@@ -1,9 +1,108 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
 const API = "https://pigive.onrender.com/api";
 
 const CATEGORIES = ["All", "General", "Gaming", "Education", "Food", "Tech", "Music", "Sports", "Fashion", "Other"];
+
+// ─── CURRENCY CONFIG ────────────────────────────────────────────────────────
+const CURRENCY_MAP = {
+  NG: { code: "NGN", symbol: "₦",   name: "Nigerian Naira" },
+  GH: { code: "GHS", symbol: "GH₵", name: "Ghanaian Cedi" },
+  KE: { code: "KES", symbol: "KSh", name: "Kenyan Shilling" },
+  ZA: { code: "ZAR", symbol: "R",   name: "South African Rand" },
+  GB: { code: "GBP", symbol: "£",   name: "British Pound" },
+  DE: { code: "EUR", symbol: "€",   name: "Euro" },
+  FR: { code: "EUR", symbol: "€",   name: "Euro" },
+  IN: { code: "INR", symbol: "₹",   name: "Indian Rupee" },
+  PH: { code: "PHP", symbol: "₱",   name: "Philippine Peso" },
+  ID: { code: "IDR", symbol: "Rp",  name: "Indonesian Rupiah" },
+  VN: { code: "VND", symbol: "₫",   name: "Vietnamese Dong" },
+  BD: { code: "BDT", symbol: "৳",   name: "Bangladeshi Taka" },
+  PK: { code: "PKR", symbol: "₨",   name: "Pakistani Rupee" },
+  CN: { code: "CNY", symbol: "¥",   name: "Chinese Yuan" },
+  JP: { code: "JPY", symbol: "¥",   name: "Japanese Yen" },
+  KR: { code: "KRW", symbol: "₩",   name: "South Korean Won" },
+  BR: { code: "BRL", symbol: "R$",  name: "Brazilian Real" },
+  MX: { code: "MXN", symbol: "MX$", name: "Mexican Peso" },
+  EG: { code: "EGP", symbol: "E£",  name: "Egyptian Pound" },
+  TZ: { code: "TZS", symbol: "TSh", name: "Tanzanian Shilling" },
+  US: { code: "USD", symbol: "$",   name: "US Dollar" },
+};
+const FALLBACK_CURRENCY = { code: "USD", symbol: "$", name: "US Dollar" };
+const FALLBACK_PI_USD = 1.45;
+const FALLBACK_FX = { NGN:1580, GHS:15.8, KES:129, ZAR:18.5, GBP:0.79, EUR:0.92, INR:83.5, PHP:56.2, IDR:15800, VND:24500, BDT:110, PKR:278, CNY:7.24, JPY:149, KRW:1320, BRL:4.97, MXN:17.2, EGP:30.9, TZS:2520, USD:1 };
+
+// ─── CONVERTER HOOK ──────────────────────────────────────────────────────────
+function usePiConverter() {
+  const [piUSD, setPiUSD]       = useState(FALLBACK_PI_USD);
+  const [fxRates, setFxRates]   = useState(FALLBACK_FX);
+  const [userCurrency, setUserCurrency] = useState(FALLBACK_CURRENCY);
+  const [rateReady, setRateReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      // 1. Detect country via IP
+      let countryCode = "US";
+      try {
+        const geo = await fetch("https://ipapi.co/json/");
+        if (geo.ok) {
+          const g = await geo.json();
+          countryCode = g.country_code || "US";
+        }
+      } catch {}
+      if (!cancelled) setUserCurrency(CURRENCY_MAP[countryCode] || FALLBACK_CURRENCY);
+
+      // 2. Fetch live Pi price (CoinGecko)
+      try {
+        const pg = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=pi-network&vs_currencies=usd");
+        if (pg.ok) {
+          const d = await pg.json();
+          if (d["pi-network"]?.usd && !cancelled) setPiUSD(d["pi-network"].usd);
+        }
+      } catch {}
+
+      // 3. Fetch live FX rates
+      try {
+        const fx = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
+        if (fx.ok) {
+          const d = await fx.json();
+          if (d.rates && !cancelled) setFxRates(d.rates);
+        }
+      } catch {}
+
+      if (!cancelled) setRateReady(true);
+    }
+    load();
+    // Refresh Pi price every 5 minutes
+    const iv = setInterval(async () => {
+      try {
+        const pg = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=pi-network&vs_currencies=usd");
+        if (pg.ok) { const d = await pg.json(); if (d["pi-network"]?.usd) setPiUSD(d["pi-network"].usd); }
+      } catch {}
+    }, 300000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, []);
+
+  // Convert any Pi amount to user's local currency string
+  const convert = useCallback((piAmount) => {
+    const rate = fxRates[userCurrency.code] || 1;
+    const value = piAmount * piUSD * rate;
+    const sym = userCurrency.symbol;
+    if (value >= 1000000) return `${sym}${(value / 1000000).toFixed(2)}M`;
+    if (value >= 1000) return `${sym}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+    if (value < 0.01) return `${sym}${value.toFixed(4)}`;
+    return `${sym}${value.toFixed(2)}`;
+  }, [piUSD, fxRates, userCurrency]);
+
+  // Short label for cards: "π 0.05 (~₦79)"
+  const cardLabel = useCallback((piAmount) => {
+    return `π ${piAmount} (~${convert(piAmount)})`;
+  }, [convert]);
+
+  return { piUSD, userCurrency, convert, cardLabel, rateReady };
+}
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
@@ -126,6 +225,17 @@ const styles = `
   .recent-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
   .recent-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
   .task-type { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  /* ── CONVERTER STYLES ── */
+  .converter-box { background: var(--card2); border: 1px solid var(--border-hot); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 20px; }
+  .converter-title { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+  .converter-rate { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  .converter-rate span { color: var(--gold); font-weight: 600; }
+  .converter-row { display: flex; gap: 10px; align-items: center; }
+  .converter-input { flex: 1; padding: 12px 14px; background: var(--dark); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 18px; font-weight: 700; font-family: 'Syne', sans-serif; outline: none; width: 100%; }
+  .converter-input:focus { border-color: var(--gold); }
+  .converter-result { flex: 1; padding: 12px 14px; background: rgba(245,166,35,0.08); border: 1px solid var(--border-hot); border-radius: 10px; font-size: 18px; font-weight: 700; color: var(--gold); font-family: 'Syne', sans-serif; text-align: right; }
+  .converter-arrow { color: var(--gold); font-size: 18px; flex-shrink: 0; }
+  .pill-fiat { background: rgba(245,166,35,0.08); border-color: rgba(245,166,35,0.3); color: var(--muted); font-size: 11px; }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
@@ -152,7 +262,8 @@ function useCountdown(expiresAt) {
   return timeLeft;
 }
 
-function GiveawayCard({ g, user, onClaim, onLike, onComment, onShare }) {
+// ─── GIVEAWAY CARD (now receives cardLabel + convert) ────────────────────────
+function GiveawayCard({ g, user, onClaim, onLike, onComment, onShare, cardLabel, convert }) {
   const timeLeft = useCountdown(g.expiresAt);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -168,7 +279,8 @@ function GiveawayCard({ g, user, onClaim, onLike, onComment, onShare }) {
       </div>
       {g.description && <div className="card-desc">{g.description}</div>}
       <div className="card-meta">
-        <span className="pill pill-gold">π {g.amountPerUser} per person</span>
+        {/* ── CONVERTED AMOUNT PILL ── */}
+        <span className="pill pill-gold">{cardLabel(g.amountPerUser)}</span>
         <span className="pill">📍 {g.eligibility?.location?.country || "Worldwide"}</span>
         <span className="countdown">⏱ {timeLeft}</span>
       </div>
@@ -215,6 +327,34 @@ function GiveawayCard({ g, user, onClaim, onLike, onComment, onShare }) {
   );
 }
 
+// ─── MINI CONVERTER WIDGET (shown on Profile page) ───────────────────────────
+function MiniConverter({ piUSD, userCurrency, convert }) {
+  const [piAmt, setPiAmt] = useState("1");
+  const fiatResult = convert(parseFloat(piAmt) || 0);
+
+  return (
+    <div className="converter-box">
+      <div className="converter-title">💱 Pi Converter</div>
+      <div className="converter-rate">
+        Live rate: <span>1 π = ${piUSD.toFixed(4)}</span> · Auto-converted to <span>{userCurrency.code}</span>
+      </div>
+      <div className="converter-row">
+        <input
+          className="converter-input"
+          type="number"
+          min="0"
+          step="any"
+          value={piAmt}
+          onChange={e => setPiAmt(e.target.value)}
+          placeholder="0"
+        />
+        <span className="converter-arrow">→</span>
+        <div className="converter-result">{fiatResult}</div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [giveaways, setGiveaways] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
@@ -228,6 +368,9 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [form, setForm] = useState({ title: "", description: "", category: "General", amount: "", amountPerUser: "", country: "", expiresAt: "" });
 
+  // ── CONVERTER ──
+  const { piUSD, userCurrency, convert, cardLabel, rateReady } = usePiConverter();
+
   useEffect(() => {
     fetchGiveaways();
     axios.get(API + "/giveaways/leaderboard").then(r => setLeaderboard(r.data)).catch(() => {});
@@ -235,14 +378,8 @@ function App() {
     axios.get(API + "/tasks/active").then(r => setTasks(r.data)).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    fetchGiveaways();
-  }, [selectedCategory]);
-
-  useEffect(() => {
-    if (user) fetchAnalytics();
-  }, [user]);
-
+  useEffect(() => { fetchGiveaways(); }, [selectedCategory]);
+  useEffect(() => { if (user) fetchAnalytics(); }, [user]);
   useEffect(() => {
     const interval = setInterval(fetchGiveaways, 30000);
     return () => clearInterval(interval);
@@ -294,8 +431,7 @@ function App() {
     try {
       const response = await axios.post(API + "/giveaways/claim", { giveawayId, userId: user._id });
       addNotification("🎉 You claimed a giveaway! +" + response.data.giveaway?.amountPerUser + " Pi");
-      fetchGiveaways();
-      fetchAnalytics();
+      fetchGiveaways(); fetchAnalytics();
     } catch (error) { alert(error.response?.data?.message || "Claim failed"); }
   };
 
@@ -443,7 +579,7 @@ function App() {
               </div>
             )}
             <div className="page-title">Active Giveaways</div>
-            <div className="page-sub">{giveaways.length} live giveaway{giveaways.length !== 1 ? "s" : ""} right now</div>
+            <div className="page-sub">{giveaways.length} live giveaway{giveaways.length !== 1 ? "s" : ""} right now · {rateReady ? `1π = $${piUSD.toFixed(3)}` : "Loading rates..."}</div>
 
             {/* CATEGORY FILTER */}
             <div className="cat-scroll">
@@ -462,7 +598,8 @@ function App() {
             ) : giveaways.map(g => (
               <GiveawayCard key={g._id} g={g} user={user}
                 onClaim={claimGiveaway} onLike={likeGiveaway}
-                onComment={commentOnGiveaway} onShare={shareGiveaway} />
+                onComment={commentOnGiveaway} onShare={shareGiveaway}
+                cardLabel={cardLabel} convert={convert} />
             ))}
           </div>
         )}
@@ -478,7 +615,7 @@ function App() {
               <div key={u._id} className="lb-item">
                 <div className={`lb-rank ${lbRankClass(i)}`}>{lbRankLabel(i)}</div>
                 <div className="lb-name">@{u.username}</div>
-                <div className="lb-pi">π {u.totalReceived}</div>
+                <div className="lb-pi">π {u.totalReceived} <span style={{fontSize:11,color:"var(--muted)"}}>({convert(u.totalReceived)})</span></div>
               </div>
             ))}
           </div>
@@ -520,7 +657,10 @@ function App() {
                 <div className="task-type">{taskTypeIcon(t.type)} {taskTypeLabel(t.type)}</div>
                 <div className="card-title">{t.title}</div>
                 {t.description && <div className="card-desc">{t.description}</div>}
-                <div className="card-meta"><span className="pill pill-gold">π {t.reward} reward</span></div>
+                <div className="card-meta">
+                  <span className="pill pill-gold">π {t.reward} reward</span>
+                  <span className="pill pill-fiat">≈ {convert(t.reward)}</span>
+                </div>
                 {t.link && <a href={t.link} target="_blank" rel="noopener noreferrer" style={{ display: "block", color: "var(--gold)", fontSize: 13, marginBottom: 14, textDecoration: "none" }}>🔗 Open task link →</a>}
                 {isTaskCompleted(t) ? <div className="btn-disabled">✅ Completed</div>
                   : <button className="btn-primary" onClick={() => completeTask(t._id)}>Complete Task →</button>}
@@ -553,6 +693,12 @@ function App() {
                   <input className="form-input" type="number" placeholder="1" value={form.amountPerUser} onChange={e => setForm({ ...form, amountPerUser: e.target.value })} />
                 </div>
               </div>
+              {/* Show fiat equivalent as user types */}
+              {form.amountPerUser && (
+                <div style={{ fontSize: 13, color: "var(--gold)", marginTop: -12, marginBottom: 16 }}>
+                  ≈ {convert(parseFloat(form.amountPerUser) || 0)} per person in {userCurrency.code}
+                </div>
+              )}
               <label className="form-label">Country (optional)</label>
               <input className="form-input" placeholder="Leave blank for worldwide" value={form.country} onChange={e => setForm({ ...form, country: e.target.value })} />
               <label className="form-label">Expires At *</label>
@@ -572,11 +718,22 @@ function App() {
             </div>
 
             <div className="stats-grid">
-              <div className="stat-card"><div className="stat-value">π {user.totalReceived || 0}</div><div className="stat-label">Total Received</div></div>
-              <div className="stat-card"><div className="stat-value">π {user.totalGiven || 0}</div><div className="stat-label">Total Given</div></div>
+              <div className="stat-card">
+                <div className="stat-value">π {user.totalReceived || 0}</div>
+                <div className="stat-label">Total Received</div>
+                <div style={{ fontSize: 12, color: "var(--gold)", marginTop: 4, opacity: 0.8 }}>{convert(user.totalReceived || 0)}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">π {user.totalGiven || 0}</div>
+                <div className="stat-label">Total Given</div>
+                <div style={{ fontSize: 12, color: "var(--gold)", marginTop: 4, opacity: 0.8 }}>{convert(user.totalGiven || 0)}</div>
+              </div>
               <div className="stat-card"><div className="stat-value">{user.followers?.length || 0}</div><div className="stat-label">Followers</div></div>
               <div className="stat-card"><div className="stat-value">{user.referralCount || 0}</div><div className="stat-label">Referrals</div></div>
             </div>
+
+            {/* ── MINI CONVERTER ── */}
+            <MiniConverter piUSD={piUSD} userCurrency={userCurrency} convert={convert} />
 
             {/* REFERRAL */}
             <div className="referral-box">
@@ -600,7 +757,7 @@ function App() {
                 </div>
                 <div className="analytics-mini" style={{ marginBottom: 16 }}>
                   <div className="analytics-val">π {analytics.totalPiGiven?.toFixed(2)}</div>
-                  <div className="analytics-lbl">Total Pi Distributed</div>
+                  <div className="analytics-lbl">Total Pi Distributed · {convert(analytics.totalPiGiven || 0)}</div>
                 </div>
 
                 {analytics.recentGiveaways?.length > 0 && (
